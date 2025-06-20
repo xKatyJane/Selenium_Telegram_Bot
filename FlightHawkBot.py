@@ -6,7 +6,7 @@ import asyncio
 import hashlib
 from dotenv import load_dotenv
 import os
-import FlightTracker
+from FlightTracker import FlightTracker
 from DateParser import DateParser
 from DatabaseManager import DatabaseManager
 from telegram import Update
@@ -119,7 +119,7 @@ async def choose_origin_main(update: Update, context: ContextTypes.DEFAULT_TYPE)
     logger.info(f"User {user.first_name} entered the departure city as: {origin_preliminary_choice}")
     context.user_data["origin_preliminary_choice"] = origin_preliminary_choice
     flight_type_choice = context.user_data.get("flight_type_choice", "Default Value")
-    flight_tracker = FlightTracker.FlightTracker(context)
+    flight_tracker = FlightTracker(context)
     flight_tracker.get_google_flights()
     flight_tracker.flight_type(context)
     main_origin_options = flight_tracker.main_choice(context, 1, origin_preliminary_choice)
@@ -143,7 +143,7 @@ async def choose_origin_specific(update: Update, context: ContextTypes.DEFAULT_T
     origin_main_choice = update.message.text
     logger.info(f"User {user.first_name} chose a main origin option: {origin_main_choice}")
     context.user_data["origin_main_choice"] = origin_main_choice
-    flight_tracker = FlightTracker.FlightTracker(context)
+    flight_tracker = FlightTracker(context)
     flight_tracker.specific_choice(context, origin_main_choice)
     origin_specific_options = flight_tracker.specific_choice(context, origin_main_choice)
 
@@ -170,7 +170,7 @@ async def choose_departure_main(update: Update, context: ContextTypes.DEFAULT_TY
     origin_specific_choice = update.message.text
     logger.info(f"User {user.first_name} chose origin specific as: {origin_specific_choice}")
     context.user_data["origin_specific_choice"] = origin_specific_choice
-    flight_tracker = FlightTracker.FlightTracker(context)
+    flight_tracker = FlightTracker(context)
     origin_specific_choice = context.user_data.get("origin_specific_choice")
     flight_tracker.confirm_decision(context, origin_specific_choice)
     await update.message.reply_text(f" 🛬 Great! What is your destination city?")
@@ -184,7 +184,7 @@ async def choose_destination_main(update: Update, context: ContextTypes.DEFAULT_
     logger.info(f"User {user.first_name} entered the destination city as: {destination_preliminary_choice}")
     context.user_data["destination_preliminary_choice"] = destination_preliminary_choice
     destination_preliminary_choice = context.user_data.get("destination_preliminary_choice")
-    flight_tracker = FlightTracker.FlightTracker(context)
+    flight_tracker = FlightTracker(context)
     main_destination_options = flight_tracker.main_choice(context, 2, destination_preliminary_choice)
 
     if main_destination_options:
@@ -206,7 +206,7 @@ async def choose_destination_specific(update: Update, context: ContextTypes.DEFA
     destination_main_choice = update.message.text
     logger.info(f"User {user.first_name} chose a main destination option: {destination_main_choice}")
     context.user_data["destination_main_choice"] = destination_main_choice
-    flight_tracker = FlightTracker.FlightTracker(context)
+    flight_tracker = FlightTracker(context)
     destination_specific_options = flight_tracker.specific_choice(context, destination_main_choice)
 
     if len(destination_specific_options)<=2:
@@ -259,7 +259,7 @@ async def confirmed(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if context.user_data.get("flight_type_choice") == "Round trip":
         await update.message.reply_text("And what is your return date?")
         return RETURN_DATE
-    flight_tracker = FlightTracker.FlightTracker(context)
+    flight_tracker = FlightTracker(context)
     destination_specific_choice = context.user_data.get("destination_specific_choice")
     flight_tracker.confirm_decision(context, destination_specific_choice)
     flight_tracker.date(context)
@@ -285,7 +285,7 @@ async def choose_return_date(update: Update, context: ContextTypes.DEFAULT_TYPE)
         logger.info("The entered return flight date was rejected by the parser")
         return RETURN_DATE
     context.user_data["return_date_choice"] = return_date_choice
-    flight_tracker = FlightTracker.FlightTracker(context)
+    flight_tracker = FlightTracker(context)
     destination_specific_choice = context.user_data.get("destination_specific_choice")
     flight_tracker.confirm_decision(context, destination_specific_choice)
     flight_tracker.return_date(context)
@@ -426,7 +426,7 @@ async def change_departure_flight(update: Update, context: ContextTypes.DEFAULT_
     ''' For round trip flights, changing the departure date '''
     query = update.callback_query
     await query.answer()
-    flight_tracker = FlightTracker.FlightTracker(context)
+    flight_tracker = FlightTracker(context)
     flight_tracker.come_back_to_dep_flight(context)
     flights = flight_tracker.fetch_flight_data(context)
     await display_flight_results(flights, update, context)
@@ -458,7 +458,7 @@ async def paginate_results(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await change_flight_date(context, update, data, is_return_flight=True)
     
     if data.startswith("flight_"):
-        flight_tracker = FlightTracker.FlightTracker(context)
+        flight_tracker = FlightTracker(context)
         flight_tracker.fetch_return_flight_data(context)
 
 async def change_flight_date(context: ContextTypes.DEFAULT_TYPE, update: Update, direction: str, is_return_flight: bool):
@@ -485,7 +485,7 @@ async def change_flight_date(context: ContextTypes.DEFAULT_TYPE, update: Update,
     # Updating the correct date in context
     if flight_type == "One way":
         context.user_data["date_choice"] = new_date
-        flight_tracker = FlightTracker.FlightTracker(context)
+        flight_tracker = FlightTracker(context)
         flight_tracker.date_change(context, "Departure", is_return_flight = False)
         flights = flight_tracker.fetch_flight_data(context)
         if flights is None:
@@ -494,7 +494,7 @@ async def change_flight_date(context: ContextTypes.DEFAULT_TYPE, update: Update,
     elif flight_type == "Round trip":
         if not is_return_flight:
             context.user_data["date_choice"] = new_date
-            flight_tracker = FlightTracker.FlightTracker(context)
+            flight_tracker = FlightTracker(context)
             flight_tracker.date_change(context, "Departure", is_return_flight = False)
             flights = flight_tracker.fetch_flight_data(context)
             if flights is None:
@@ -502,7 +502,7 @@ async def change_flight_date(context: ContextTypes.DEFAULT_TYPE, update: Update,
             await display_flight_results(flights, update, context, page=0, show_all=False, is_return_flight=False, is_date_change=True)
         elif is_return_flight:
             context.user_data["return_date_choice"] = new_date
-            flight_tracker = FlightTracker.FlightTracker(context)
+            flight_tracker = FlightTracker(context)
             flight_tracker.date_change(context, "Return", is_return_flight = True)
             flights = flight_tracker.fetch_flight_data(context)
             if flights is None:
@@ -529,7 +529,7 @@ async def handle_return_flight(update: Update, context: ContextTypes.DEFAULT_TYP
 #        return
     
     # Clicking on the selected departure flight to see the return flight data
-    flight_tracker = FlightTracker.FlightTracker(context)
+    flight_tracker = FlightTracker(context)
     flight_tracker.confirm_dep_flight_for_round_trip(selected_index, context)
     return_flights = flight_tracker.fetch_flight_data(context)
     context.user_data["return_flights"] = return_flights
@@ -707,9 +707,9 @@ async def cleanup_idle_drivers(context):
     ''' Cleans up idle Chrome drivers after inactivity '''
 
     application = context.application
-    inactivity_timeout = 20 * 60
+    inactivity_timeout = 15 * 60
     while True:
-        await asyncio.sleep(300)
+        await asyncio.sleep(905)
 
         for user_id, user_data in list(application.user_data.items()):
             driver = user_data.get("driver")
@@ -734,7 +734,7 @@ def main() -> None:
     BOT_TOKEN = '7843297201:AAF5-rRRaBsUYHMamsIEug-Kd-YSynlHTSw'
     BOT_NAME = '@Flight_Hawk_Bot'
     application = Application.builder().token("7843297201:AAF5-rRRaBsUYHMamsIEug-Kd-YSynlHTSw").build()
-    application.job_queue.run_repeating(cleanup_idle_drivers, interval=60, first=60)
+    application.job_queue.run_repeating(cleanup_idle_drivers, interval=905, first=905)
 
     conversation_handler = ConversationHandler(
         entry_points=[CommandHandler('start', start)],

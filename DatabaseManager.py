@@ -1,6 +1,5 @@
 import asyncpg
 
-
 class DatabaseManager():
     def __init__(self, db_url):
         self.db_url = db_url
@@ -14,7 +13,7 @@ class DatabaseManager():
     async def close_connection(self):
         if self.connection_pool:
             await self.connection_pool.close()
-            print("connection closed")
+            print("Connection to the database closed.")
 
     async def create_tables(self):
         await self.connect()
@@ -63,7 +62,7 @@ class DatabaseManager():
             await conn.execute("""
                                DROP TABLE IF EXISTS bookmarks
                                """)
-            print("table dropped")
+            print("BOOKMARKS table dropped.")
     
     async def insert_user(self, user):
         if self.connection_pool is None:

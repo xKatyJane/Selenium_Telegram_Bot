@@ -8,7 +8,6 @@ from selenium.common.exceptions import (StaleElementReferenceException, ElementN
 from selenium.webdriver.common.action_chains import ActionChains
 import time
 import re
-import FlightHawkBot
 from FlightDataManager import FlightDataManager
 from datetime import datetime, timedelta
 
@@ -26,6 +25,7 @@ class FlightTracker():
             options.add_argument("--no-sandbox")
             options.add_argument("--disable-dev-shm-usage")
             options.add_argument("--disable-extensions")
+            options.add_argument("--headless")
             self.service = Service(executable_path="/Users/katia/Selenium_Chromedriver/chromedriver")
             self.driver = webdriver.Chrome(service=self.service, options=options)
             context.user_data["driver"] = self.driver
@@ -39,14 +39,6 @@ class FlightTracker():
         self.destination_specific_choice = context.user_data.get("destination_specific_choice", None)
         self.date_choice = context.user_data.get("date_choice", None)
         self.return_date_choice = context.user_data.get("return_date_choice", None)
-#        self.driver = None
-#        self.grouped_origin_options = context.user_data['grouped_origin_options', None]
-#        self.driver = None
-#        options = webdriver.ChromeOptions()
-#        options.add_argument("--headless")
-#        self.driver = webdriver.Chrome(service=self.service)
-#        self.service = Service(executable_path="/Users/katia/Selenium_Chromedriver/chromedriver")
-#        self.driver.get("https://www.google.com/travel/flights")
         
     def get_google_flights(self):
         ''' Gets the Google Flights URL '''
@@ -271,19 +263,6 @@ class FlightTracker():
             except StaleElementReferenceException:
                 print("⚠️ Skipped a stale element.")
 
-#        for idx, flight in enumerate(flight_info, start=1):
-#            print(f"\n✈️  Flight {idx}")
-#            print(f"  Airports:         {flight['airports']}")
-#            print(f"  Departure Date:   {flight['departure_date']}")
-#            print(f"  Departure Time:   {flight['departure_time']}")
-#            print(f"  Arrival Date:     {flight['arrival_date']}")
-#            print(f"  Arrival Time:     {flight['arrival_time']}")
-#            print(f"  Airline:          {flight['airline']}")
-#            print(f"  Duration:         {flight['flight_duration']}")
-#            print(f"  Number of Stops:  {flight['nr_of_stops']}")
-#            print(f"  Price:            {flight['price']}")
-#            print(f"  Currency:         {flight['currency']}")
-        
         return flight_info
     
     def fetch_return_flight_data(self, context):
