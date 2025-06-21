@@ -72,6 +72,8 @@ async def set_bot_commands(application):
     commands = [
         BotCommand("start", "🔍 Flights Search"),
         BotCommand("bookmarks", "🎒 Bookmarks"),
+        BotCommand("help", "ℹ️ Help"),
+        BotCommand("disclaimer", "⚠️ Disclaimer")
     ]
     await application.bot.set_my_commands(commands)
 
@@ -747,7 +749,8 @@ async def noop_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main() -> None:
     BOT_TOKEN = '7843297201:AAF5-rRRaBsUYHMamsIEug-Kd-YSynlHTSw'
     BOT_NAME = '@Flight_Hawk_Bot'
-    application = Application.builder().token("7843297201:AAF5-rRRaBsUYHMamsIEug-Kd-YSynlHTSw").build()
+    application = Application.builder().token("7843297201:AAF5-rRRaBsUYHMamsIEug-Kd-YSynlHTSw").post_init(set_bot_commands).build()
+
     application.job_queue.run_repeating(cleanup_idle_drivers, interval=905, first=905)
 
     conversation_handler = ConversationHandler(
@@ -776,10 +779,10 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(change_departure_flight, pattern="^change_departure_flight$"))
     application.add_handler(CallbackQueryHandler(bookmarks_pagination_handler, pattern=r"^bookmarks_page_\d+$"))
     application.add_handler(CallbackQueryHandler(delete_bookmark, pattern=r"^delete_bookmark_\d+$"))
-    disclaimer_handler = CommandHandler('disclaimer', disclaimer)
     application.add_error_handler(error_handler)
 
     application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("bookmarks", display_bookmarks))
     application.add_handler(CommandHandler("disclaimer", disclaimer))
 
