@@ -747,65 +747,41 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     error = context.error
     user = update.effective_user
     chat_id = update.effective_chat.id
-    should_restart_conversation = False
-    quit_driver = False
+    should_restart = False
+    error_message = None
+    logger.error(f"Exception while handling update {getattr(update, 'update_id', 'Unknown')}: {error}")
 
-    # Prevent sending repeated error messages
-    now = time.time()
-    last_error_time = context.user_data.get("last_error_time", 0)
-    if now - last_error_time < 5:
-        logger.warning(f"Suppressing repeated error message for user {user.id if user else 'Unknown'}")
-        return None
-    context.user_data["last_error_time"] = now
-
-    logger.error(f"Exception while handling update {update.update_id if update else 'Unknown'}: {error}",exc_info=error)
-
-#    if chat_id:
-#        try:
-#            await context.bot.send_message(chat_id=update.effective_chat.id, text="⚠️ Something went wrong. Please try again.")
-#        except TelegramError:
-#            pass
-
-    if isinstance(error, NetworkError):
-        logger.warning(f"Network error for {user.name}: {error}")
-        error_message = "🌐 Network connection issue. Please try again in a moment."
-        
-    elif isinstance(error, TimedOut):
-        logger.warning(f"Request timed out for {user.name}: {error}")
-        error_message = "⏱️ Request timed out. Please try again."
+    if isinstance(error, NetworkError) or isinstance(error, TimedOut):
+        logger.warning(f"Transient network issue for user {user.id if user else 'Unknown'}: {error}")
+        return
         
     elif isinstance(error, BadRequest):
-        logger.warning(f"Bad request for {user.name}: {error}")
-        if "message is not modified" in str(error).lower():
+        error_text = str(error).lower()
+        if "query is too old" in error_text or "query id is invalid" in error_text:
+            logger.warning(f"Ignored stale callback for user {user.name}: {error}")
             return
-        error_message = "❌ Invalid request. Please start over with /start"
-        should_restart_conversation = True
+        elif "message is not modified" in error_text:
+            logger.debug(f"No change in message for user {user.name}, ignoring.")
+            return
+        else:
+            error_message = "❌ Invalid request. Please start over with /start"
+            should_restart = True
         
     elif isinstance(error, Forbidden):
         logger.warning(f"Bot was blocked by {user.name}: {error}")
         return
         
-    elif "selenium" in str(error).lower() or "webdriver" in str(error).lower():
-        logger.error(f"Selenium/WebDriver error for {user.name}: {error}")
-        error_message = "🤖 Browser automation issue. Please try again with /start"
-        should_restart_conversation = True
-        quit_driver = True
-        
-    elif "database" in str(error).lower() or "connection" in str(error).lower():
-        logger.error(f"Database error for {user.name}: {error}")
-        error_message = "💾 Database connection issue. Please try again later."
-        
     else:
         logger.error(f"Unknown error for {user.name}: {error}")
         logger.error(f"Full traceback: {traceback.format_exc()}")
-        error_message = "⚠️ An unexpected error occurred. Please try again with /start"
-        should_restart_conversation = True
-        quit_driver = True
+        error_message = "⚠️ Something went wrong. Please try again with /start"
+        should_restart = True
     
-    try:
-        await context.bot.send_message(chat_id=chat_id, text=error_message)
-    except TelegramError as e:
-        logger.error(f"Failed to send error message to {user.name}: {e}")
+    if chat_id and error_message:
+        try:
+            await context.bot.send_message(chat_id=chat_id, text=error_message)
+        except TelegramError as e:
+            logger.error(f"Failed to send error message to {user.name}: {e}")
 
     if hasattr(context, 'driver'):
         try:
@@ -813,7 +789,7 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             pass
     
-    if should_restart_conversation:
+    if 'should_restart' in locals() and should_restart:
         return ConversationHandler.END
 
     return None
