@@ -6,13 +6,13 @@ import asyncio
 import hashlib
 from dotenv import load_dotenv
 import os
+import traceback
 from FlightTracker import FlightTracker
 from DateParser import DateParser
 from DatabaseManager import DatabaseManager
 from telegram import Update
 from telegram import ReplyKeyboardMarkup
 from telegram import KeyboardButton
-from telegram import ReplyKeyboardRemove
 from telegram import InlineKeyboardButton
 from telegram import InlineKeyboardMarkup
 from telegram import BotCommand
@@ -24,27 +24,21 @@ from telegram.ext import ContextTypes
 from telegram.ext import CallbackQueryHandler
 from telegram.ext import ConversationHandler
 from telegram.ext import Application, MessageHandler, filters
-from telegram.error import TelegramError
+from telegram.error import TelegramError, NetworkError, BadRequest, Forbidden, TimedOut
 
-flight_type_choice = None
-origin_preliminary_choice = None
-origin_main_choice = None
-origin_specific_choice = None
-destination_preliminary_choice = None
-destination_main_choice = None
-destination_specific_choice = None
-date_choice = None
-load_dotenv()
-database_url = os.getenv('db_url')
 
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
-db_manager = DatabaseManager(db_url=database_url)
+load_dotenv()
+db_url = os.getenv('db_url')
+db_manager = DatabaseManager(db_url=db_url)
 
 FLIGHT_TYPE, ORIGIN_PRELIMINARY, ORIGIN_MAIN, ORIGIN_SPECIFIC, DESTINATION_PRELIMINARY, DESTINATION_MAIN, DESTINATION_SPECIFIC, FLIGHT_DATE, RETURN_DATE = range(9)
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    logger.info(f"User {user.first_name} requested help")
     help_text = (
         "🛫 <b>Flight Hawk Bot Guide</b>\n\n"
         "/start - Start searching for flights\n"
@@ -57,6 +51,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(help_text, parse_mode="HTML")
 
 async def disclaimer(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    logger.info(f"User {user.first_name} requested disclaimer")
     message = (
         "⚠️ *Disclaimer*\n\n"
         "This bot is an experimental project built for personal use and shared on GitHub. "
@@ -118,7 +114,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 async def flight_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     ''' Saves flight type choice and asks for departure city '''
-    global flight_type_choice
 
     user = update.message.from_user
     flight_type_choice = update.message.text.capitalize()
@@ -128,7 +123,7 @@ async def flight_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     return ORIGIN_PRELIMINARY
 
 async def choose_origin_main(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    ''' Saves the option entered by the user (preliminaty origin) and presents a list of matching origin options '''
+    ''' Saves the option entered by the user (preliminary origin) and presents a list of matching origin options '''
 
     user = update.message.from_user
     origin_preliminary_choice = update.message.text
@@ -193,7 +188,7 @@ async def choose_departure_main(update: Update, context: ContextTypes.DEFAULT_TY
     return DESTINATION_PRELIMINARY
 
 async def choose_destination_main(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    ''' Saves the option entered by the user (preliminaty destination) and presents a list of matching destination options '''
+    ''' Saves the option entered by the user (preliminary destination) and presents a list of matching destination options '''
 
     user = update.message.from_user
     destination_preliminary_choice = update.message.text
@@ -282,7 +277,9 @@ async def confirmed(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     flights = flight_tracker.fetch_flight_data(context)
     if not flights:
         await update.message.reply_text("❌ No flights were found. Please try changing the data.\nYou can enter a new date.")
+        logger.info(f"No flights found for user {user.first_name}")
         return FLIGHT_DATE
+    logger.info(f"Found {len(flights)} flights for user {user.first_name}")
     await display_flight_results(flights, update, context)
     return ConversationHandler.END
 
@@ -296,6 +293,11 @@ async def choose_return_date(update: Update, context: ContextTypes.DEFAULT_TYPE)
         date_parser = DateParser(entered_return_date_choice)
         return_date_choice = date_parser.transform_date()
         logger.info(f"The entered return flight date was parsed as: {return_date_choice}")
+        date_choice = context.user_data.get("date_choice")
+        if return_date_choice < date_choice:
+            await update.message.reply_text("The return date cannot be before the departure date.")
+            logger.info("The entered return flight date was rejected because it is before the departure date.")
+            return RETURN_DATE
     except:
         await update.message.reply_text("This is not the correct date format, please try again.")
         logger.info("The entered return flight date was rejected by the parser")
@@ -440,6 +442,7 @@ async def display_flight_results(flights, update: Update, context: ContextTypes.
 
 async def change_departure_flight(update: Update, context: ContextTypes.DEFAULT_TYPE, is_return_flight: bool = False):
     ''' For round trip flights, changing the departure date '''
+
     query = update.callback_query
     await query.answer()
     flight_tracker = FlightTracker(context)
@@ -462,7 +465,6 @@ async def paginate_results(update: Update, context: ContextTypes.DEFAULT_TYPE):
         flights = context.user_data.get("flights", [])
         await display_flight_results(flights, update, context, page=new_page)
 
-#    data = query.data
     if data.startswith("page_"):
         page = int(data.split("_")[1])
         flights = context.user_data.get("flights", [])
@@ -526,7 +528,10 @@ async def change_flight_date(context: ContextTypes.DEFAULT_TYPE, update: Update,
             await display_flight_results(flights, update, context, page=0, show_all=False, is_return_flight=True, is_date_change=True)
 
 async def handle_return_flight(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    ''' For round trip flights, gets data for the return trip '''
+
     query = update.callback_query
+    user = query.from_user
     await query.answer()
     data = query.data
 
@@ -537,12 +542,11 @@ async def handle_return_flight(update: Update, context: ContextTypes.DEFAULT_TYP
         context.user_data["selected_departure_flight_index"] = selected_index
     except (IndexError, ValueError):
         await query.edit_message_text("Invalid flight selection.")
+        logger.info("The flight index could not be identifed.")
         return
     
     flights = context.user_data.get("flights", [])
-#    if not flights or selected_index >= len(flights):
-#        await query.edit_message_text("⚠️ That flight no longer exists or is unavailable.")
-#        return
+    logger.info(f"User {user.first_name} selected departure flight to view return options")
     
     # Clicking on the selected departure flight to see the return flight data
     flight_tracker = FlightTracker(context)
@@ -617,7 +621,9 @@ async def display_bookmarks(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     ''' Displays bookmarked flights to the user '''
 
     user_id = update.effective_user.id
+    user = update.effective_user
     query = update.callback_query
+    logger.info(f"User {user.first_name} requested bookmarks.")
     message = update.message
     bookmarks_per_page = 5
     bookmarks = await db_manager.get_user_bookmarks(user_id)
@@ -630,7 +636,7 @@ async def display_bookmarks(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         await message.reply_text("📭 You have no bookmarks yet.")
         return
     
-    text = ""
+    text = f"You have {len(bookmarks)} total bookmarks.\n\n"
     keyboard = []
     for idx, row in enumerate(current_page_bookmarks, start=start + 1):
         if row['flight_type'] == "One way":
@@ -677,8 +683,11 @@ async def display_bookmarks(update: Update, context: ContextTypes.DEFAULT_TYPE, 
         await message.reply_text(text.strip(), parse_mode="HTML", reply_markup=reply_markup)
 
 async def delete_bookmark(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    ''' Deletes selected bookmark from the database '''
+
     query = update.callback_query
     await query.answer()
+    user = query.from_user
 
     bookmark_id = int(query.data.split("_")[-1])
     user_id = query.from_user.id
@@ -689,6 +698,7 @@ async def delete_bookmark(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     await db_manager.delete_bookmark(bookmark_id)
+    logger.info(f"User {user.first_name} successfully deleted bookmark {bookmark_id}")
     await display_bookmarks(update, context, page=0)
 
     
@@ -701,22 +711,73 @@ async def bookmarks_pagination_handler(update: Update, context: ContextTypes.DEF
         page = int(data.split("_")[-1])
         await display_bookmarks(update, context, page=page)
 
-async def error_handler(update, context):
-    """Logs the error and cleans up browser if needed."""
+async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    ''' Logs the error and cleans up browser if needed '''
 
-    logger.error("Exception while handling an update:", exc_info=context.error)
+    error = context.error
+    user = update.effective_user
+    chat_id = update.effective_chat.id
+    should_restart_conversation = False
+    quit_driver = False
+    logger.error(f"Exception while handling update {update.update_id if update else 'Unknown'}: {error}",exc_info=error)
 
-    if update and update.effective_user:
+    if chat_id:
         try:
             await context.bot.send_message(chat_id=update.effective_chat.id, text="⚠️ Something went wrong. Please try again.")
         except TelegramError:
             pass
+
+    if isinstance(error, NetworkError):
+        logger.warning(f"Network error for {user.name}: {error}")
+        error_message = "🌐 Network connection issue. Please try again in a moment."
+        
+    elif isinstance(error, TimedOut):
+        logger.warning(f"Request timed out for {user.name}: {error}")
+        error_message = "⏱️ Request timed out. Please try again."
+        
+    elif isinstance(error, BadRequest):
+        logger.warning(f"Bad request for {user.name}: {error}")
+        if "message is not modified" in str(error).lower():
+            return
+        error_message = "❌ Invalid request. Please start over with /start"
+        should_restart_conversation = True
+        
+    elif isinstance(error, Forbidden):
+        logger.warning(f"Bot was blocked by {user.name}: {error}")
+        return
+        
+    elif "selenium" in str(error).lower() or "webdriver" in str(error).lower():
+        logger.error(f"Selenium/WebDriver error for {user.name}: {error}")
+        error_message = "🤖 Browser automation issue. Please try again with /start"
+        should_restart_conversation = True
+        quit_driver = True
+        
+    elif "database" in str(error).lower() or "connection" in str(error).lower():
+        logger.error(f"Database error for {user.name}: {error}")
+        error_message = "💾 Database connection issue. Please try again later."
+        
+    else:
+        logger.error(f"Unknown error for {user.name}: {error}")
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+        error_message = "⚠️ An unexpected error occurred. Please try again with /start"
+        should_restart_conversation = True
+        quit_driver = True
+    
+    try:
+        await context.bot.send_message(chat_id=chat_id, text=error_message)
+    except TelegramError as e:
+        logger.error(f"Failed to send error message to {user.name}: {e}")
 
     if hasattr(context, 'driver'):
         try:
             context.driver.quit()
         except Exception:
             pass
+    
+    if should_restart_conversation:
+        return ConversationHandler.END
+
+    return None
 
 
 async def cleanup_idle_drivers(context):
@@ -747,10 +808,10 @@ async def noop_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 def main() -> None:
-    BOT_TOKEN = '7843297201:AAF5-rRRaBsUYHMamsIEug-Kd-YSynlHTSw'
-    BOT_NAME = '@Flight_Hawk_Bot'
-    application = Application.builder().token("7843297201:AAF5-rRRaBsUYHMamsIEug-Kd-YSynlHTSw").post_init(set_bot_commands).build()
 
+    load_dotenv()
+    bot_token = os.getenv('bot_token')
+    application = Application.builder().token(bot_token).post_init(set_bot_commands).build()
     application.job_queue.run_repeating(cleanup_idle_drivers, interval=905, first=905)
 
     conversation_handler = ConversationHandler(
@@ -770,7 +831,6 @@ def main() -> None:
         allow_reentry=True
     )
     application.add_handler(conversation_handler)
-    application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CallbackQueryHandler(paginate_results, pattern=r"^(page_\d+|date_(previous|next)_(dep|ret))$"))
     application.add_handler(CallbackQueryHandler(handle_flight_bookmark, pattern=r"^flight_\d+_[a-f0-9]{8}$"))
     application.add_handler(CallbackQueryHandler(handle_flight_bookmark, pattern=r"^return_flight_ret_\d+_[a-f0-9]{8}$"))
@@ -779,13 +839,13 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(change_departure_flight, pattern="^change_departure_flight$"))
     application.add_handler(CallbackQueryHandler(bookmarks_pagination_handler, pattern=r"^bookmarks_page_\d+$"))
     application.add_handler(CallbackQueryHandler(delete_bookmark, pattern=r"^delete_bookmark_\d+$"))
-    application.add_error_handler(error_handler)
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("bookmarks", display_bookmarks))
     application.add_handler(CommandHandler("disclaimer", disclaimer))
 
+    application.add_error_handler(error_handler)
     application.run_polling()
 
 if __name__ == '__main__':
