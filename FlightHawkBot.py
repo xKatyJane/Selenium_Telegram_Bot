@@ -559,6 +559,12 @@ async def handle_return_flight(update: Update, context: ContextTypes.DEFAULT_TYP
 async def handle_flight_bookmark(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ''' Handles adding a new flight bookmark into the database '''
     
+    # Preventing repeated clicks on the same button
+    if context.user_data.get("bookmarking_in_progress"):
+        await update.callback_query.answer("⏳ Processing previous request...")
+        return
+    
+    context.user_data["bookmarking_in_progress"] = True
     query = update.callback_query
     await query.answer()
     user = update.effective_user
@@ -615,7 +621,12 @@ async def handle_flight_bookmark(update: Update, context: ContextTypes.DEFAULT_T
                 new_row.append(button)
         new_keyboard.append(new_row)
 
-    await query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup(new_keyboard))
+    try:
+        await query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup(new_keyboard))
+    except BadRequest as e:
+        if "message is not modified" not in str(e).lower():
+            raise e
+    context.user_data["bookmarking_in_progress"] = False
 
 async def display_bookmarks(update: Update, context: ContextTypes.DEFAULT_TYPE, page: int = 0):
     ''' Displays bookmarked flights to the user '''
@@ -694,12 +705,31 @@ async def delete_bookmark(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     bookmarks = await db_manager.get_user_bookmarks(user_id, limit=100)
     if not any(b['id'] == bookmark_id for b in bookmarks):
-        await query.edit_message_text("❌ You are not authorized to delete this bookmark.")
+        await display_bookmarks(update, context, page=0)
         return
 
     await db_manager.delete_bookmark(bookmark_id)
     logger.info(f"User {user.first_name} successfully deleted bookmark {bookmark_id}")
-    await display_bookmarks(update, context, page=0)
+    await query.message.reply_text(f"✅ Bookmark deleted.")
+
+    # Showing "DELETED" on buttons after deleting a bookmark
+    old_keyboard = query.message.reply_markup.inline_keyboard
+    new_keyboard = []
+    for row in old_keyboard:
+        new_row = []
+        for button in row:
+            if button.callback_data and str(bookmark_id) in button.callback_data:
+                # Replace deleted bookmark button
+                new_row.append(InlineKeyboardButton("✅ Deleted", callback_data="noop"))
+            else:
+                # Copy unchanged buttons
+                new_row.append(button)
+        new_keyboard.append(new_row)
+    new_markup = InlineKeyboardMarkup(new_keyboard)
+    try:
+        await query.edit_message_reply_markup(reply_markup=new_markup)
+    except Exception as e:
+        logger.warning(f"Failed to update buttons after deletion: {e}")
 
     
 async def bookmarks_pagination_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -719,13 +749,22 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.effective_chat.id
     should_restart_conversation = False
     quit_driver = False
+
+    # Prevent sending repeated error messages
+    now = time.time()
+    last_error_time = context.user_data.get("last_error_time", 0)
+    if now - last_error_time < 5:
+        logger.warning(f"Suppressing repeated error message for user {user.id if user else 'Unknown'}")
+        return None
+    context.user_data["last_error_time"] = now
+
     logger.error(f"Exception while handling update {update.update_id if update else 'Unknown'}: {error}",exc_info=error)
 
-    if chat_id:
-        try:
-            await context.bot.send_message(chat_id=update.effective_chat.id, text="⚠️ Something went wrong. Please try again.")
-        except TelegramError:
-            pass
+#    if chat_id:
+#        try:
+#            await context.bot.send_message(chat_id=update.effective_chat.id, text="⚠️ Something went wrong. Please try again.")
+#        except TelegramError:
+#            pass
 
     if isinstance(error, NetworkError):
         logger.warning(f"Network error for {user.name}: {error}")
