@@ -36,6 +36,7 @@ db_manager = DatabaseManager(db_url=db_url)
 
 FLIGHT_TYPE, ORIGIN_PRELIMINARY, ORIGIN_MAIN, ORIGIN_SPECIFIC, DESTINATION_PRELIMINARY, DESTINATION_MAIN, DESTINATION_SPECIFIC, FLIGHT_DATE, RETURN_DATE = range(9)
 
+
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     logger.info(f"User {user.first_name} requested help")
@@ -49,6 +50,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Currently supports One Way and Round Trip searches."
     )
     await update.message.reply_text(help_text, parse_mode="HTML")
+
 
 async def disclaimer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -64,6 +66,7 @@ async def disclaimer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     await update.message.reply_text(message, parse_mode='Markdown')
 
+
 async def set_bot_commands(application):
     commands = [
         BotCommand("start", "🔍 Flights Search"),
@@ -72,6 +75,7 @@ async def set_bot_commands(application):
         BotCommand("disclaimer", "⚠️ Disclaimer")
     ]
     await application.bot.set_my_commands(commands)
+
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     ''' Displays the welcome message and asks for flight type '''
@@ -112,6 +116,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     )
     return FLIGHT_TYPE
 
+
 async def flight_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     ''' Saves flight type choice and asks for departure city '''
 
@@ -121,6 +126,7 @@ async def flight_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     context.user_data["flight_type_choice"] = flight_type_choice
     await update.message.reply_text(f"{flight_type_choice} it is! 🛫\nWhat is your departure city?")
     return ORIGIN_PRELIMINARY
+
 
 async def choose_origin_main(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     ''' Saves the option entered by the user (preliminary origin) and presents a list of matching origin options '''
@@ -146,6 +152,7 @@ async def choose_origin_main(update: Update, context: ContextTypes.DEFAULT_TYPE)
     else:
         await update.message.reply_text("No such option found, please try again.")
         return ORIGIN_PRELIMINARY
+
 
 async def choose_origin_specific(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     ''' Saves the user's main origin choice, and if there are multiply airports in the chosen city, presents a list of airports '''
@@ -174,6 +181,7 @@ async def choose_origin_specific(update: Update, context: ContextTypes.DEFAULT_T
                                             resize_keyboard=True))
         return ORIGIN_SPECIFIC
 
+
 async def choose_departure_main(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     ''' Saves the airport / specific origin choice and asks for the destination '''
 
@@ -186,6 +194,7 @@ async def choose_departure_main(update: Update, context: ContextTypes.DEFAULT_TY
     flight_tracker.confirm_decision(context, origin_specific_choice)
     await update.message.reply_text(f" 🛬 Great! What is your destination city?")
     return DESTINATION_PRELIMINARY
+
 
 async def choose_destination_main(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     ''' Saves the option entered by the user (preliminary destination) and presents a list of matching destination options '''
@@ -209,6 +218,7 @@ async def choose_destination_main(update: Update, context: ContextTypes.DEFAULT_
     else:
         await update.message.reply_text("No such option found, please try again.")
         return DESTINATION_PRELIMINARY
+
 
 async def choose_destination_specific(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     ''' Saves the user's main destination choice, and if there are multiply airports in the chosen city, presents a list of airports '''
@@ -237,6 +247,7 @@ async def choose_destination_specific(update: Update, context: ContextTypes.DEFA
         await update.message.reply_text("No such option found, please try again.")
         return DESTINATION_PRELIMINARY
 
+
 async def choose_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     ''' Saves the airport / specific destination choice and asks for the date '''
 
@@ -246,6 +257,7 @@ async def choose_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     context.user_data["destination_specific_choice"] = destination_specific_choice
     await update.message.reply_text("Noted! 🗓️ What is the departure date?\nFor example: June 12, 12.06, 12.06.2025.")
     return FLIGHT_DATE
+
 
 async def confirmed(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     ''' Saves the flight date, gets the flight info for one way flights, asks for return date for round trip flights '''
@@ -283,6 +295,7 @@ async def confirmed(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await display_flight_results(flights, update, context)
     return ConversationHandler.END
 
+
 async def choose_return_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     ''' Saves the return flight date, gets the flight info for round trip flights '''
 
@@ -310,6 +323,7 @@ async def choose_return_date(update: Update, context: ContextTypes.DEFAULT_TYPE)
     flights = flight_tracker.fetch_flight_data(context)
     await display_flight_results(flights, update, context)
     return ConversationHandler.END
+
 
 async def display_flight_results(flights, update: Update, context: ContextTypes.DEFAULT_TYPE, page: int = 0, show_all: bool = False, is_date_change: bool = False, is_return_flight: bool = False):
     ''' Displays a message with the flight ino to the user '''
@@ -440,6 +454,7 @@ async def display_flight_results(flights, update: Update, context: ContextTypes.
     context.user_data["flights"] = flights
     context.user_data["page"] = page
 
+
 async def change_departure_flight(update: Update, context: ContextTypes.DEFAULT_TYPE, is_return_flight: bool = False):
     ''' For round trip flights, changing the departure date '''
 
@@ -478,6 +493,7 @@ async def paginate_results(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data.startswith("flight_"):
         flight_tracker = FlightTracker(context)
         flight_tracker.fetch_return_flight_data(context)
+
 
 async def change_flight_date(context: ContextTypes.DEFAULT_TYPE, update: Update, direction: str, is_return_flight: bool):
     ''' Handles date change to previous / next day for departure or return flight '''
@@ -526,6 +542,7 @@ async def change_flight_date(context: ContextTypes.DEFAULT_TYPE, update: Update,
             if flights is None:
                 flights = []
             await display_flight_results(flights, update, context, page=0, show_all=False, is_return_flight=True, is_date_change=True)
+
 
 async def handle_return_flight(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ''' For round trip flights, gets data for the return trip '''
@@ -628,6 +645,7 @@ async def handle_flight_bookmark(update: Update, context: ContextTypes.DEFAULT_T
             raise e
     context.user_data["bookmarking_in_progress"] = False
 
+
 async def display_bookmarks(update: Update, context: ContextTypes.DEFAULT_TYPE, page: int = 0):
     ''' Displays bookmarked flights to the user '''
 
@@ -693,6 +711,7 @@ async def display_bookmarks(update: Update, context: ContextTypes.DEFAULT_TYPE, 
     else:
         await message.reply_text(text.strip(), parse_mode="HTML", reply_markup=reply_markup)
 
+
 async def delete_bookmark(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ''' Deletes selected bookmark from the database '''
 
@@ -754,7 +773,7 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if isinstance(error, NetworkError) or isinstance(error, TimedOut):
         logger.warning(f"Transient network issue for user {user.id if user else 'Unknown'}: {error}")
         return
-        
+
     elif isinstance(error, BadRequest):
         error_text = str(error).lower()
         if "query is too old" in error_text or "query id is invalid" in error_text:
