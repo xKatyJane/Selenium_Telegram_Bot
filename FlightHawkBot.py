@@ -49,14 +49,14 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🛫 <b>Flight Hawk Bot Guide</b>\n\n"
         "/start - Start searching for flights\n"
         "/bookmarks - View your saved flights\n"
-        "/help - Show this help message\n\n"
-        "/disclaimer - View bot info and disclaimer\n"
+        "/help - Show this help message\n"
+        "/disclaimer - View bot info and disclaimer\n\n"
         "Use the on-screen buttons to navigate, bookmark, or delete flights.\n"
         "Currently supports One Way and Round Trip searches."
     )
     await update.message.reply_text(help_text, parse_mode="HTML")
 
-def disclaimer(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def disclaimer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = (
         "⚠️ *Disclaimer*\n\n"
         "This bot is an experimental project built for personal use and shared on GitHub. "
@@ -66,7 +66,7 @@ def disclaimer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Use at your own discretion.\n\n"
         "For updates and source code, visit: [GitHub](https://github.com/xKatyJane/Selenium_Telegram_Bot)"
     )
-    update.message.reply_text(message, parse_mode='Markdown')
+    await update.message.reply_text(message, parse_mode='Markdown')
 
 async def set_bot_commands(application):
     commands = [
