@@ -16,9 +16,10 @@ from telegram import ReplyKeyboardRemove
 from telegram import InlineKeyboardButton
 from telegram import InlineKeyboardMarkup
 from telegram import BotCommand
+from telegram.ext import CommandHandler
+from telegram.ext import CallbackContext
 from telegram.ext import JobQueue
 from telegram.ext import ApplicationBuilder
-from telegram.ext import CommandHandler
 from telegram.ext import ContextTypes
 from telegram.ext import CallbackQueryHandler
 from telegram.ext import ConversationHandler
@@ -49,10 +50,23 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/start - Start searching for flights\n"
         "/bookmarks - View your saved flights\n"
         "/help - Show this help message\n\n"
+        "/disclaimer - View bot info and disclaimer\n"
         "Use the on-screen buttons to navigate, bookmark, or delete flights.\n"
         "Currently supports One Way and Round Trip searches."
     )
     await update.message.reply_text(help_text, parse_mode="HTML")
+
+def disclaimer(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = (
+        "⚠️ *Disclaimer*\n\n"
+        "This bot is an experimental project built for personal use and shared on GitHub. "
+        "It scrapes data from Google Flights and is not officially affiliated with Google or any airline.\n\n"
+        "Because the data is scraped from a third-party site, it may sometimes be inaccurate or unavailable, "
+        "and the bot may break if the site changes.\n\n"
+        "Use at your own discretion.\n\n"
+        "For updates and source code, visit: [GitHub](https://github.com/xKatyJane/Selenium_Telegram_Bot)"
+    )
+    update.message.reply_text(message, parse_mode='Markdown')
 
 async def set_bot_commands(application):
     commands = [
@@ -762,10 +776,12 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(change_departure_flight, pattern="^change_departure_flight$"))
     application.add_handler(CallbackQueryHandler(bookmarks_pagination_handler, pattern=r"^bookmarks_page_\d+$"))
     application.add_handler(CallbackQueryHandler(delete_bookmark, pattern=r"^delete_bookmark_\d+$"))
+    disclaimer_handler = CommandHandler('disclaimer', disclaimer)
     application.add_error_handler(error_handler)
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("bookmarks", display_bookmarks))
+    application.add_handler(CommandHandler("disclaimer", disclaimer))
 
     application.run_polling()
 
